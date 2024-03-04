@@ -1,30 +1,24 @@
 package main
 
 import (
-	"flag"
 	"os"
-	"os/user"
+	"stellard/discover"
+	"stellard/listener"
+	"stellard/proto"
+	"sync"
 )
 
-type InitParams struct {
-	Name      *string
-	Port      *int
-	PeersFile *string
-}
-
-var initParams InitParams
-
 func init() {
-	currentUser, _ := user.Current()
-	hostName, _ := os.Hostname()
-
-	initParams = InitParams{
-		Name:      flag.String("name", currentUser.Username+"@"+hostName, "you name"),
-		Port:      flag.Int("port", 35035, "port that have to listen"),
-		PeersFile: flag.String("peers", "peers.txt", "Path to file with peer addresses on each line"),
+	if len(os.Args) != 2 {
+		panic("len args != 2")
 	}
 }
 
 func main() {
-	startListener(*initParams.Port)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	node := proto.NewNode(os.Args[1])
+	go listener.StartListener(node)
+	go discover.StartDiscover(node)
+	wg.Wait()
 }
