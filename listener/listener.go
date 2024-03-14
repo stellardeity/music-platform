@@ -1,8 +1,15 @@
 package listener
 
 import (
+	"bufio"
+	"fmt"
+	"io"
+	"log"
 	"net"
-	"stellard/proto"
+	"net/http"
+	"os"
+	"path"
+	"rockwall/proto"
 )
 
 var itHttp = map[string]bool{
@@ -19,16 +26,25 @@ func ItIsHttp(ba []byte) bool {
 }
 
 func StartListener(node *proto.Node) {
-	listen, err := net.Listen("tcp", "0.0.0.0"+node.Address.Port)
-	if err != nil {
-		panic("listen error")
-	}
-	defer listen.Close()
+	service := fmt.Sprintf("0.0.0.0%v", node.Address.Port)
 
+	tcpAddr, err := net.ResolveTCPAddr("tcp", service)
+	if err != nil {
+		log.Printf("ResolveTCPAddr: %s", err.Error())
+		os.Exit(1)
+	}
+
+	listener, err := net.ListenTCP("tcp", tcpAddr)
+	if err != nil {
+		log.Printf("ListenTCP: %s", err.Error())
+		os.Exit(1)
+	}
+
+	fmt.Printf("\n\tService start on %s\n\n", tcpAddr.String())
 	for {
-		conn, err := listen.Accept()
+		conn, err := listener.Accept()
 		if err != nil {
-			break
+			continue
 		}
 		go handleConnection(node, conn)
 	}
@@ -37,28 +53,57 @@ func StartListener(node *proto.Node) {
 func handleConnection(node *proto.Node, conn net.Conn) {
 	defer conn.Close()
 
-	// reader := bufio.NewReader(conn)
-	// writer := bufio.NewWriter(conn)
+	log.Printf("New connection: %s", conn.RemoteAddr())
 
-	// readWriter := bufio.NewReadWriter(reader, writer)
+	reader := bufio.NewReader(conn)
+	writer := bufio.NewWriter(conn)
 
-	// buf, err := readWriter.Peek(4)
-	// if err != nil {
-	// 	if err != io.EOF {
-	// 		log.Printf("Read peak ERROR: %s", err)
-	// 	}
-	// 	return
-	// }
+	readWriter := bufio.NewReadWriter(reader, writer)
 
-	// if ItIsHttp(buf) {
-	// 	handleHttp(readWriter)
-	// 	return
-	// } else {
-	node.HandleNode(conn)
-	// }
+	buf, err := readWriter.Peek(4)
+	if err != nil {
+		if err != io.EOF {
+			log.Printf("Read peak ERROR: %s", err)
+		}
+	}
+
+	if ItIsHttp(buf) {
+		handleHttp(readWriter, conn, node)
+	} else {
+		node.HandleNode(conn)
+	}
 }
 
-// func handleHttp(rw *bufio.ReadWriter) {
-// 	request, _ := http.ReadRequest(rw.Reader)
-// 	log.Printf("%s", request.URL)
-// }
+func handleHttp(rw *bufio.ReadWriter, conn net.Conn, node *proto.Node) {
+	request, err := http.ReadRequest(rw.Reader)
+
+	if err != nil {
+		log.Printf("Read request ERROR: %s", err)
+		return
+	}
+
+	response := http.Response{
+		StatusCode: 200,
+		ProtoMajor: 1,
+		ProtoMinor: 1,
+	}
+
+	log.Printf("ROCK %s", path.Clean(request.URL.Path))
+	if path.Clean(request.URL.Path) == "/ws" {
+		handleWs(NewMyWriter(conn), request, node)
+	} else {
+		processRequest(request, &response)
+	}
+
+	err = response.Write(rw)
+	if err != nil {
+		log.Printf("Write response ERROR: %s", err)
+		return
+	}
+
+	err = rw.Writer.Flush()
+	if err != nil {
+		log.Printf("Flush response ERROR: %s", err)
+		return
+	}
+}

@@ -60,6 +60,7 @@ func (node *Node) HandleNode(conn net.Conn) {
 	}
 	err := json.Unmarshal([]byte(message), &pack)
 	if err != nil {
+		log.Printf("%s", err)
 		return
 	}
 	node.ConnectTo([]string{pack.From})
@@ -75,6 +76,7 @@ func (node *Node) SendMessageToAll(message string) {
 		new_pack.To = addr
 		node.Send(new_pack)
 	}
+
 }
 
 func (node *Node) Send(pack *Package) {
