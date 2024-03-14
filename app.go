@@ -2,9 +2,9 @@ package main
 
 import (
 	"os"
-	"stellard/discover"
-	"stellard/listener"
-	"stellard/proto"
+	"rockwall/discover"
+	"rockwall/listener"
+	"rockwall/proto"
 	"sync"
 )
 

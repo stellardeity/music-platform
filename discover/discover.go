@@ -3,7 +3,7 @@ package discover
 import (
 	"bufio"
 	"os"
-	"stellard/proto"
+	"rockwall/proto"
 	"strings"
 )
 
