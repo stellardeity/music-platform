@@ -1,32 +1,49 @@
+/*
+Package listener
+Listen port and detect connection type
+*/
 package listener
 
 import (
 	"bufio"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"path"
 	"rockwall/proto"
+	"strings"
 )
 
 var itHttp = map[string]bool{
 	"GET ": true,
+	"HEAD": true,
 	"POST": true,
 	"PUT ": true,
 	"DELE": true,
+	"CONN": true,
 	"OPTI": true,
+	"TRAC": true,
 	"PATC": true,
 }
 
+// ItIsHttp detect http request by first bytes
 func ItIsHttp(ba []byte) bool {
 	return itHttp[string(ba)]
 }
 
-func StartListener(node *proto.Node) {
-	service := fmt.Sprintf("0.0.0.0%v", node.Address.Port)
+// StartListener Старт прослушивания порта и обработки входящих соединений
+func StartListener(proto *proto.Proto, port int) {
+	// Устновака порта в случае неправильного ввода
+	if port <= 0 || port > 65535 {
+		port = 35035
+	}
+
+	// Прослушиваем все интерфейсы
+	service := fmt.Sprintf("0.0.0.0:%v", port)
 
 	tcpAddr, err := net.ResolveTCPAddr("tcp", service)
 	if err != nil {
@@ -46,14 +63,19 @@ func StartListener(node *proto.Node) {
 		if err != nil {
 			continue
 		}
-		go handleConnection(node, conn)
+		go onConnection(conn, proto)
 	}
+
 }
 
-func handleConnection(node *proto.Node, conn net.Conn) {
-	defer conn.Close()
+// onConnection Обработка входящего соединения
+func onConnection(conn net.Conn, p *proto.Proto) {
+	defer func() {
+		//proto.Peers.(conn)
+		conn.Close()
+	}()
 
-	log.Printf("New connection: %s", conn.RemoteAddr())
+	log.Printf("New connection from: %v", conn.RemoteAddr().String())
 
 	reader := bufio.NewReader(conn)
 	writer := bufio.NewWriter(conn)
@@ -65,16 +87,19 @@ func handleConnection(node *proto.Node, conn net.Conn) {
 		if err != io.EOF {
 			log.Printf("Read peak ERROR: %s", err)
 		}
+		return
 	}
 
 	if ItIsHttp(buf) {
-		handleHttp(readWriter, conn, node)
+		handleHttp(readWriter, conn, p)
 	} else {
-		node.HandleNode(conn)
+		peer := proto.NewPeer(conn)
+		p.HandleProto(readWriter, peer)
 	}
 }
 
-func handleHttp(rw *bufio.ReadWriter, conn net.Conn, node *proto.Node) {
+// handleHttp Обработка HTTP запроса
+func handleHttp(rw *bufio.ReadWriter, conn net.Conn, p *proto.Proto) {
 	request, err := http.ReadRequest(rw.Reader)
 
 	if err != nil {
@@ -88,11 +113,20 @@ func handleHttp(rw *bufio.ReadWriter, conn net.Conn, node *proto.Node) {
 		ProtoMinor: 1,
 	}
 
-	log.Printf("ROCK %s", path.Clean(request.URL.Path))
-	if path.Clean(request.URL.Path) == "/ws" {
-		handleWs(NewMyWriter(conn), request, node)
+	s := conn.RemoteAddr().String()[0:3]
+	// TODO: сравнение среза со строкой
+	if !strings.EqualFold(s, "127") && !strings.EqualFold(s, "[::") {
+		response.Body = ioutil.NopCloser(strings.NewReader("Peer To Peer Messenger. see https://github.com/easmith/p2p-messenger"))
 	} else {
-		processRequest(request, &response)
+
+		if path.Clean(request.URL.Path) == "/ws" {
+			handleWs(NewMyWriter(conn), request, p)
+			return
+		} else {
+			processRequest(request, &response)
+			//fileServer := http.FileServer(http.Dir("./front/build/"))
+			//fileServer.ServeHTTP(NewMyWriter(conn), request)
+		}
 	}
 
 	err = response.Write(rw)
