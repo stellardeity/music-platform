@@ -88,11 +88,10 @@ func handleHttp(rw *bufio.ReadWriter, conn net.Conn, node *proto.Node) {
 		ProtoMinor: 1,
 	}
 
-	log.Printf("ROCK %s", path.Clean(request.URL.Path))
 	if path.Clean(request.URL.Path) == "/ws" {
-		handleWs(NewMyWriter(conn), request, node)
+		handleWs(ResponseWriter(conn), request, node)
 	} else {
-		processRequest(request, &response)
+		handleStatic(request, &response)
 	}
 
 	err = response.Write(rw)

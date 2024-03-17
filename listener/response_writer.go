@@ -36,6 +36,6 @@ func (w MyWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	return w.conn, readWriter, nil
 }
 
-func NewMyWriter(conn net.Conn) http.ResponseWriter {
+func ResponseWriter(conn net.Conn) http.ResponseWriter {
 	return &MyWriter{conn}
 }

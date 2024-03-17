@@ -10,7 +10,7 @@ import (
 
 func init() {
 	if len(os.Args) != 2 {
-		panic("len args != 2")
+		panic("Enter port [:8080]")
 	}
 }
 

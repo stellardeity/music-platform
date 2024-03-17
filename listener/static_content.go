@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func processRequest(request *http.Request, response *http.Response) {
+func handleStatic(request *http.Request, response *http.Response) {
 	path := path.Clean(request.URL.Path)
 	filePath := "./front/build" + path
 	info, _ := os.Stat(filePath)
