@@ -42,6 +42,7 @@ func StartListener(node *proto.Node) {
 
 	fmt.Printf("\n\tService start on %s\n\n", tcpAddr.String())
 	for {
+
 		conn, err := listener.Accept()
 		if err != nil {
 			continue
@@ -88,11 +89,16 @@ func handleHttp(rw *bufio.ReadWriter, conn net.Conn, node *proto.Node) {
 		ProtoMinor: 1,
 	}
 
+	// s := conn.RemoteAddr().String()[0:3]
+	// if !strings.EqualFold(s, "127") {
+	// 	response.Body = ioutil.NopCloser(strings.NewReader("Block"))
+	// } else {
 	if path.Clean(request.URL.Path) == "/ws" {
 		handleWs(ResponseWriter(conn), request, node)
 	} else {
 		handleStatic(request, &response)
 	}
+	// }
 
 	err = response.Write(rw)
 	if err != nil {

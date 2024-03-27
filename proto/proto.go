@@ -48,7 +48,7 @@ func (node *Node) HandleNode(conn net.Conn) {
 	var (
 		buffer  = make([]byte, 512)
 		message string
-		pack    *Package
+		// pack    *Package
 	)
 
 	for {
@@ -58,13 +58,15 @@ func (node *Node) HandleNode(conn net.Conn) {
 		}
 		message += string(buffer[:length])
 	}
-	err := json.Unmarshal([]byte(message), &pack)
-	if err != nil {
-		log.Printf("%s", err)
-		return
-	}
-	node.ConnectTo([]string{pack.From})
-	log.Println(pack.Date)
+
+	log.Printf("MESSAGE %s", message)
+	// err := json.Unmarshal([]byte(message), &pack)
+	// if err != nil {
+	// 	log.Printf("ERROR THIS %s", err)
+	// 	return
+	// }
+
+	// node.ConnectTo([]string{pack.From})
 }
 
 func (node *Node) SendMessageToAll(message string) {
@@ -80,7 +82,7 @@ func (node *Node) SendMessageToAll(message string) {
 }
 
 func (node *Node) Send(pack *Package) {
-	conn, err := net.Dial("tcp", pack.To)
+	conn, err := net.Dial("tcp", pack.From)
 	if err != nil {
 		delete(node.Connections, pack.To)
 		return
@@ -90,6 +92,8 @@ func (node *Node) Send(pack *Package) {
 
 	json_pack, _ := json.Marshal(*pack)
 	conn.Write(json_pack)
+	log.Printf("Send message to peer %s; From: %s; Date: %s", pack.To, pack.From, pack.Date)
+
 }
 
 func (node *Node) ConnectTo(addresses []string) {

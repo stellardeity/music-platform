@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-
 	"rockwall/proto"
 
 	"github.com/gorilla/websocket"
@@ -26,8 +25,6 @@ func handleWs(w http.ResponseWriter, r *http.Request, node *proto.Node) {
 
 	log.Printf("Ws started")
 
-	br := make(chan bool)
-
 	for {
 		mt, message, err := c.ReadMessage()
 		if err != nil {
@@ -44,20 +41,10 @@ func handleWs(w http.ResponseWriter, r *http.Request, node *proto.Node) {
 			continue
 		}
 
-		writeToWs(c, mt, message)
-		var new_pack = &proto.Package{
-			From: node.Address.IPv4 + node.Address.Port,
-			Date: decodedMessage.Content,
+		err = c.WriteMessage(mt, message)
+		if err != nil {
+			log.Printf("ws write error: %s", err)
 		}
-		node.Send(new_pack)
-	}
-
-	br <- true
-}
-
-func writeToWs(c *websocket.Conn, mt int, message []byte) {
-	err := c.WriteMessage(mt, message)
-	if err != nil {
-		log.Printf("ws write error: %s", err)
+		node.SendMessageToAll("I WANNA ROCK")
 	}
 }
