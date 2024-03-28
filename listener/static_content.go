@@ -2,24 +2,34 @@ package listener
 
 import (
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"path"
 	"strings"
 )
 
-func handleStatic(request *http.Request, response *http.Response) {
+func processRequest(request *http.Request, response *http.Response) {
 	path := path.Clean(request.URL.Path)
+
+	log.Printf("Request: %v\n", path)
+
 	filePath := "./front/build" + path
-	info, _ := os.Stat(filePath)
+
+	info, err := os.Stat(filePath)
+	if os.IsNotExist(err) {
+		response.StatusCode = 404
+		response.Body = ioutil.NopCloser(strings.NewReader("Not found!"))
+		return
+	}
 
 	if info.IsDir() {
 		_, err := os.Stat(filePath + "index.html")
 		if err == nil {
-			file, _ := os.Open(filePath + "index.html")
-			response.Body = file
+			responseFile(response, filePath+"index.html")
 			return
 		}
+
 		files, err := readDir(filePath)
 		if err != nil {
 			response.StatusCode = 500
@@ -29,7 +39,23 @@ func handleStatic(request *http.Request, response *http.Response) {
 		response.Body = ioutil.NopCloser(strings.NewReader("Index of " + path + ":\n\n" + filesString))
 		return
 	}
-	file, _ := os.Open(filePath)
+
+	responseFile(response, filePath)
+}
+
+func responseFile(response *http.Response, fileName string) {
+	file, err := os.Open(fileName)
+
+	if os.IsPermission(err) {
+		response.StatusCode = 403
+		response.Body = ioutil.NopCloser(strings.NewReader("Forbidden"))
+		return
+	} else if err != nil {
+		response.StatusCode = 500
+		response.Body = ioutil.NopCloser(strings.NewReader("Internal server error: " + err.(*os.PathError).Err.Error()))
+		return
+	}
+
 	response.Body = file
 }
 
@@ -44,6 +70,7 @@ func readDir(root string) ([]string, error) {
 	if err != nil {
 		return files, err
 	}
+
 	for _, file := range fileInfo {
 		if file.IsDir() {
 			files = append(files, file.Name()+"/")

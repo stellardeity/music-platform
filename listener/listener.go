@@ -4,20 +4,25 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"path"
 	"rockwall/proto"
+	"strings"
 )
 
 var itHttp = map[string]bool{
 	"GET ": true,
+	"HEAD": true,
 	"POST": true,
 	"PUT ": true,
 	"DELE": true,
+	"CONN": true,
 	"OPTI": true,
+	"TRAC": true,
 	"PATC": true,
 }
 
@@ -25,8 +30,12 @@ func ItIsHttp(ba []byte) bool {
 	return itHttp[string(ba)]
 }
 
-func StartListener(node *proto.Node) {
-	service := fmt.Sprintf("0.0.0.0%v", node.Address.Port)
+func StartListener(proto *proto.Proto, port int) {
+	if port <= 0 || port > 65535 {
+		port = 35035
+	}
+
+	service := fmt.Sprintf("0.0.0.0:%v", port)
 
 	tcpAddr, err := net.ResolveTCPAddr("tcp", service)
 	if err != nil {
@@ -42,19 +51,19 @@ func StartListener(node *proto.Node) {
 
 	fmt.Printf("\n\tService start on %s\n\n", tcpAddr.String())
 	for {
-
 		conn, err := listener.Accept()
 		if err != nil {
 			continue
 		}
-		go handleConnection(node, conn)
+		go onConnection(conn, proto)
 	}
+
 }
 
-func handleConnection(node *proto.Node, conn net.Conn) {
-	defer conn.Close()
+func onConnection(conn net.Conn, p *proto.Proto) {
+	conn.Close()
 
-	log.Printf("New connection: %s", conn.RemoteAddr())
+	log.Printf("New connection from: %v", conn.RemoteAddr().String())
 
 	reader := bufio.NewReader(conn)
 	writer := bufio.NewWriter(conn)
@@ -66,16 +75,18 @@ func handleConnection(node *proto.Node, conn net.Conn) {
 		if err != io.EOF {
 			log.Printf("Read peak ERROR: %s", err)
 		}
+		return
 	}
 
 	if ItIsHttp(buf) {
-		handleHttp(readWriter, conn, node)
+		handleHttp(readWriter, conn, p)
 	} else {
-		node.HandleNode(conn)
+		peer := proto.NewPeer(conn)
+		p.HandleProto(readWriter, peer)
 	}
 }
 
-func handleHttp(rw *bufio.ReadWriter, conn net.Conn, node *proto.Node) {
+func handleHttp(rw *bufio.ReadWriter, conn net.Conn, p *proto.Proto) {
 	request, err := http.ReadRequest(rw.Reader)
 
 	if err != nil {
@@ -89,16 +100,19 @@ func handleHttp(rw *bufio.ReadWriter, conn net.Conn, node *proto.Node) {
 		ProtoMinor: 1,
 	}
 
-	// s := conn.RemoteAddr().String()[0:3]
-	// if !strings.EqualFold(s, "127") {
-	// 	response.Body = ioutil.NopCloser(strings.NewReader("Block"))
-	// } else {
-	if path.Clean(request.URL.Path) == "/ws" {
-		handleWs(ResponseWriter(conn), request, node)
+	s := conn.RemoteAddr().String()[0:3]
+
+	if !strings.EqualFold(s, "127") && !strings.EqualFold(s, "[::") {
+		response.Body = ioutil.NopCloser(strings.NewReader("Peer To Peer Messenger. see https://github.com/easmith/p2p-messenger"))
 	} else {
-		handleStatic(request, &response)
+
+		if path.Clean(request.URL.Path) == "/ws" {
+			handleWs(NewMyWriter(conn), request, p)
+			return
+		} else {
+			processRequest(request, &response)
+		}
 	}
-	// }
 
 	err = response.Write(rw)
 	if err != nil {
